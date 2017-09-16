@@ -84,7 +84,11 @@
 #include "../../development/include/GXDLMSAssociationShortName.h"
 
 using namespace std;
-static const char* DATAFILE = "data.csv";
+#if defined(_WIN32) || defined(_WIN64)//Windows
+TCHAR DATAFILE[FILENAME_MAX];
+#else
+char DATAFILE[FILENAME_MAX];
+#endif
 
 void ListenerThread(void* pVoid)
 {
@@ -113,8 +117,10 @@ void ListenerThread(void* pVoid)
         len = sizeof(client);
         senderInfo.clear();
         socket = accept(server->GetSocket(), (struct sockaddr*)&client, &len);
+        server->Reset();
         if (server->IsConnected())
         {
+            server->Reset();
             if ((ret = getpeername(socket, (sockaddr*)&add, &AddrLen)) == -1)
             {
                 closesocket(socket);
@@ -166,8 +172,10 @@ void ListenerThread(void* pVoid)
                     break;
                 }
                 bb.SetSize(bb.GetSize() + ret);
-                printf("-> %s\r\n", bb.ToHexString().c_str());
-
+                if (server->m_Trace == GX_TRACE_LEVEL_VERBOSE)
+                {
+                    printf("-> %s\r\n", bb.ToHexString().c_str());
+                }
                 if (server->HandleRequest(bb, reply) != 0)
                 {
 #if defined(_WIN32) || defined(_WIN64)//If Windows
@@ -181,7 +189,10 @@ void ListenerThread(void* pVoid)
                 bb.SetSize(0);
                 if (reply.GetSize() != 0)
                 {
-                    printf("<- %s\r\n", reply.ToHexString().c_str());
+                    if (server->m_Trace == GX_TRACE_LEVEL_VERBOSE)
+                    {
+                        printf("<- %s\r\n", reply.ToHexString().c_str());
+                    }
                     if (send(socket, (const char*)reply.GetData(), reply.GetSize() - reply.GetPosition(), 0) == -1)
                     {
                         //If error has occured
@@ -222,7 +233,7 @@ bool CGXDLMSBase::IsConnected()
 
 int CGXDLMSBase::GetSocket()
 {
-    return m_ServerSocket;
+    return (int)m_ServerSocket;
 }
 
 int CGXDLMSBase::StartServer(int port)
@@ -325,7 +336,11 @@ int GetIpAddress(std::string& address)
 CGXDLMSData* AddLogicalDeviceName(CGXDLMSObjectCollection& items, unsigned long sn)
 {
     char buff[17];
+#if defined(_WIN32) || defined(_WIN64)//Windows
+    sprintf_s(buff, "GRX%.13d", sn);
+#else
     sprintf(buff, "GRX%.13d", sn);
+#endif
     CGXDLMSVariant id;
     id.Add((const char*)buff, 16);
     CGXDLMSData* ldn = new CGXDLMSData("0.0.42.0.0.255", id);
@@ -351,7 +366,11 @@ void AddFirmwareVersion(CGXDLMSObjectCollection& items)
 void AddElectricityID1(CGXDLMSObjectCollection& items, unsigned long sn)
 {
     char buff[17];
+#if defined(_WIN32) || defined(_WIN64)//Windows
+    sprintf_s(buff, "GRX%.13d", sn);
+#else
     sprintf(buff, "GRX%.13d", sn);
+#endif
     CGXDLMSVariant id;
     id.Add((const char*)buff, 16);
     CGXDLMSData* d = new CGXDLMSData("1.1.0.0.0.255", id);
@@ -557,9 +576,10 @@ CGXDLMSIp4Setup* AddIp4Setup(CGXDLMSObjectCollection& items, std::string& addres
 /*
 * Generic initialize for all servers.
 */
-int CGXDLMSBase::Init(int port)
+int CGXDLMSBase::Init(int port, GX_TRACE_LEVEL trace)
 {
     int ret;
+    m_Trace = trace;
     if ((ret = StartServer(port)) != 0)
     {
         return ret;
@@ -615,7 +635,12 @@ int CGXDLMSBase::Init(int port)
     tm.AddSeconds(-tm.GetValue().tm_sec);
     tm.AddHours(-(rowCount - 1));
 
+#if defined(_WIN32) || defined(_WIN64)//Windows
+    FILE* f;
+    fopen_s(&f, DATAFILE, _T("w"));
+#else
     FILE* f = fopen(DATAFILE, "w");
+#endif
     for (int pos = 0; pos != rowCount; ++pos) {
         fprintf(f, "%s;%d\n", tm.ToString().c_str(), pos + 1);
         tm.AddHours(1);
@@ -714,10 +739,19 @@ void GetProfileGenericDataByEntry(CGXDLMSProfileGeneric* p, long index, long cou
     p->GetBuffer().clear();
     if (count != 0)
     {
-        FILE* f = fopen(DATAFILE, "r");
+#if defined(_WIN32) || defined(_WIN64)//Windows
+        FILE* f;
+        fopen_s(&f, DATAFILE, _T("w"));
+#else
+        FILE* f = fopen(DATAFILE, "w");
+#endif
         if (f != NULL)
         {
+#if defined(_WIN32) || defined(_WIN64)//Windows
+            while ((len = fscanf_s(f, "%d/%d/%d %d:%d:%d;%d", &month, &day, &year, &hour, &minute, &second, &value)) != -1)
+#else
             while ((len = fscanf(f, "%d/%d/%d %d:%d:%d;%d", &month, &day, &year, &hour, &minute, &second, &value)) != -1)
+#endif
             {
                 // Skip row
                 if (index > 0) {
@@ -765,10 +799,19 @@ void GetProfileGenericDataByRange(CGXDLMSValueEventArg* e)
     bb.Clear();
     bb.Set(e->GetParameters().Arr[2].byteArr, e->GetParameters().Arr[2].size);
     CGXDLMSClient::ChangeType(bb, DLMS_DATA_TYPE_DATETIME, end);
-    FILE* f = fopen(DATAFILE, "r");
+#if defined(_WIN32) || defined(_WIN64)//Windows
+    FILE* f;
+    fopen_s(&f, DATAFILE, _T("w"));
+#else
+    FILE* f = fopen(DATAFILE, "w");
+#endif
     if (f != NULL)
     {
+#if defined(_WIN32) || defined(_WIN64)//Windows
+        while ((len = fscanf_s(f, "%d/%d/%d %d:%d:%d;%d", &month, &day, &year, &hour, &minute, &second, &value)) != -1)
+#else
         while ((len = fscanf(f, "%d/%d/%d %d:%d:%d;%d", &month, &day, &year, &hour, &minute, &second, &value)) != -1)
+#endif
         {
             CGXDateTime tm(2000 + year, month, day, hour, minute, second, 0, 0x8000);
             if (tm.CompareTo(end.dateTime) > 0) {
@@ -793,7 +836,12 @@ void GetProfileGenericDataByRange(CGXDLMSValueEventArg* e)
 int GetProfileGenericDataCount() {
     int rows = 0;
     int ch;
-    FILE* f = fopen(DATAFILE, "r");
+#if defined(_WIN32) || defined(_WIN64)//Windows
+    FILE* f;
+    fopen_s(&f, DATAFILE, _T("w"));
+#else
+    FILE* f = fopen(DATAFILE, "w");
+#endif
     if (f != NULL)
     {
         while ((ch = fgetc(f)) != EOF)
@@ -949,9 +997,12 @@ void CGXDLMSBase::PreWrite(std::vector<CGXDLMSValueEventArg*>& args)
     std::string ln;
     for (std::vector<CGXDLMSValueEventArg*>::iterator it = args.begin(); it != args.end(); ++it)
     {
-        (*it)->GetTarget()->GetLogicalName(ln);
-        printf("Writing: %s \r\n", ln.c_str());
-        ln.clear();
+        if (m_Trace > GX_TRACE_LEVEL_WARNING)
+        {
+            (*it)->GetTarget()->GetLogicalName(ln);
+            printf("Writing: %s \r\n", ln.c_str());
+            ln.clear();
+        }
     }
 }
 
@@ -975,13 +1026,23 @@ void HandleProfileGenericActions(CGXDLMSValueEventArg* it)
     CGXDLMSProfileGeneric* pg = (CGXDLMSProfileGeneric*)it->GetTarget();
     if (it->GetIndex() == 1) {
         // Profile generic clear is called. Clear data.
+#if defined(_WIN32) || defined(_WIN64)//Windows
+        FILE* f;
+        fopen_s(&f, DATAFILE, _T("w"));
+#else
         FILE* f = fopen(DATAFILE, "w");
+#endif
         fclose(f);
     }
     else if (it->GetIndex() == 2) {
         // Profile generic Capture is called.
-        FILE* f = fopen(DATAFILE, "a");
-        for (int pos = pg->GetBuffer().size() - 1; pos != pg->GetBuffer().size(); ++pos)
+#if defined(_WIN32) || defined(_WIN64)//Windows
+        FILE* f;
+        fopen_s(&f, DATAFILE, _T("w"));
+#else
+        FILE* f = fopen(DATAFILE, "w");
+#endif
+        for (int pos = (int)pg->GetBuffer().size() - 1; pos != (int)pg->GetBuffer().size(); ++pos)
         {
             CGXDateTime tm = pg->GetBuffer().at(0).at(0).dateTime;
             int value = pg->GetBuffer().at(0).at(1).ToInteger();
@@ -1105,14 +1166,19 @@ DLMS_METHOD_ACCESS_MODE CGXDLMSBase::GetMethodAccess(CGXDLMSValueEventArg* arg)
 void CGXDLMSBase::Connected(
     CGXDLMSConnectionEventArgs& connectionInfo)
 {
-    printf("Connected.\r\n");
+    if (m_Trace > GX_TRACE_LEVEL_WARNING)
+    {
+        printf("Connected.\r\n");
+    }
 }
 
 void CGXDLMSBase::InvalidConnection(
     CGXDLMSConnectionEventArgs& connectionInfo)
 {
-    printf("InvalidConnection.\r\n");
-
+    if (m_Trace > GX_TRACE_LEVEL_WARNING)
+    {
+        printf("InvalidConnection.\r\n");
+    }
 }
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -1120,7 +1186,10 @@ void CGXDLMSBase::InvalidConnection(
 void CGXDLMSBase::Disconnected(
     CGXDLMSConnectionEventArgs& connectionInfo)
 {
-    printf("Disconnected.\r\n");
+    if (m_Trace > GX_TRACE_LEVEL_WARNING)
+    {
+        printf("Disconnected.\r\n");
+    }
 }
 
 void CGXDLMSBase::PreGet(

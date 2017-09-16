@@ -307,6 +307,7 @@ int CGXDLMSServer::HandleAarqRequest(
     CGXDLMSConnectionEventArgs& connectionInfo)
 {
     int ret;
+    CGXByteBuffer error;
     DLMS_ASSOCIATION_RESULT result = DLMS_ASSOCIATION_RESULT_ACCEPTED;
     m_Settings.GetCtoSChallenge().Clear();
     m_Settings.GetStoCChallenge().Clear();
@@ -320,10 +321,39 @@ int CGXDLMSServer::HandleAarqRequest(
     {
         return ret;
     }
-    if (diagnostic != DLMS_SOURCE_DIAGNOSTIC_NONE)
+    if (m_Settings.GetDLMSVersion() != 6)
     {
         result = DLMS_ASSOCIATION_RESULT_PERMANENT_REJECTED;
-        diagnostic = DLMS_SOURCE_DIAGNOSTIC_NOT_SUPPORTED;
+        diagnostic = DLMS_SOURCE_DIAGNOSTIC_NO_REASON_GIVEN;
+        error.SetUInt8(0xE);
+        error.SetUInt8(DLMS_CONFIRMED_SERVICE_ERROR_INITIATE_ERROR);
+        error.SetUInt8(DLMS_SERVICE_ERROR_INITIATE);
+        error.SetUInt8(DLMS_INITIATE_DLMS_VERSION_TOO_LOW);
+        m_Settings.SetDLMSVersion(6);
+    }
+    else if (m_Settings.GetMaxPduSize() < 64)
+    {
+        result = DLMS_ASSOCIATION_RESULT_PERMANENT_REJECTED;
+        diagnostic = DLMS_SOURCE_DIAGNOSTIC_NO_REASON_GIVEN;
+        error.SetUInt8(0xE);
+        error.SetUInt8(DLMS_CONFIRMED_SERVICE_ERROR_INITIATE_ERROR);
+        error.SetUInt8(DLMS_SERVICE_ERROR_INITIATE);
+        error.SetUInt8(DLMS_INITIATE_PDU_SIZE_TOOSHORT);
+        m_Settings.SetMaxReceivePDUSize(64);
+    }
+    else if (m_Settings.GetNegotiatedConformance() == 0)
+    {
+        result = DLMS_ASSOCIATION_RESULT_PERMANENT_REJECTED;
+        diagnostic = DLMS_SOURCE_DIAGNOSTIC_NO_REASON_GIVEN;
+        error.SetUInt8(0xE);
+        error.SetUInt8(DLMS_CONFIRMED_SERVICE_ERROR_INITIATE_ERROR);
+        error.SetUInt8(DLMS_SERVICE_ERROR_INITIATE);
+        error.SetUInt8(DLMS_INITIATE_INCOMPATIBLE_CONFORMANCE);
+    }
+    else if (diagnostic != DLMS_SOURCE_DIAGNOSTIC_NONE)
+    {
+        result = DLMS_ASSOCIATION_RESULT_PERMANENT_REJECTED;
+        diagnostic = DLMS_SOURCE_DIAGNOSTIC_APPLICATION_CONTEXT_NAME_NOT_SUPPORTED;
         InvalidConnection(connectionInfo);
     }
     else
@@ -358,7 +388,7 @@ int CGXDLMSServer::HandleAarqRequest(
     }
     // Generate AARE packet.
     m_Settings.ResetFrameSequence();
-    return CGXAPDU::GenerateAARE(m_Settings, m_ReplyData, result, diagnostic, m_Settings.GetCipher());
+    return CGXAPDU::GenerateAARE(m_Settings, m_ReplyData, result, diagnostic, m_Settings.GetCipher(), &error, NULL);
 }
 
 /**
@@ -534,8 +564,9 @@ int CGXDLMSServer::HandleSetRequest(
         return ret;
     }
     DLMS_OBJECT_TYPE ci = (DLMS_OBJECT_TYPE)tmp;
-    CGXByteBuffer ln;
-    ln.Set(&data, data.GetPosition(), 6);
+    unsigned char * ln;
+    ln = data.GetData() + data.GetPosition();
+    data.SetPosition(data.GetPosition() + 6);
     // Attribute index.
     if ((ret = data.GetUInt8(&index)) != 0)
     {
@@ -844,7 +875,7 @@ int CGXDLMSServer::GetRequestNormal(CGXByteBuffer& data)
     CGXDLMSValueEventCollection arr;
     unsigned char attributeIndex;
     int ret;
-    CGXByteBuffer ln;
+    unsigned char *ln;
     // CI
     unsigned short tmp;
     if ((ret = data.GetUInt16(&tmp)) != 0)
@@ -852,7 +883,8 @@ int CGXDLMSServer::GetRequestNormal(CGXByteBuffer& data)
         return ret;
     }
     DLMS_OBJECT_TYPE ci = (DLMS_OBJECT_TYPE)tmp;
-    ln.Set(&data, data.GetPosition(), 6);
+    ln = data.GetData() + data.GetPosition();
+    data.SetPosition(data.GetPosition() + 6);
     // Attribute Id
     if ((ret = data.GetUInt8(&attributeIndex)) != 0)
     {
@@ -1050,8 +1082,9 @@ int CGXDLMSServer::GetRequestWithList(CGXByteBuffer& data)
             return ret;
         }
         DLMS_OBJECT_TYPE ci = (DLMS_OBJECT_TYPE)id;
-        CGXByteBuffer ln;
-        ln.Set(&data, data.GetPosition(), 6);
+        unsigned char * ln;
+        ln = data.GetData() + data.GetPosition();
+        data.SetPosition(data.GetPosition() + 6);
         if ((ret = data.GetUInt8(&attributeIndex)) != 0)
         {
             return ret;
@@ -1848,7 +1881,6 @@ int CGXDLMSServer::HandleCommand(
         m_Settings.SetConnected(false);
         Disconnected(connectionInfo);
         frame = DLMS_COMMAND_UA;
-        Reset(true);
         break;
     case DLMS_COMMAND_NONE:
         //Get next frame.
@@ -1905,8 +1937,9 @@ int CGXDLMSServer::HandleMethodRequest(
         return ret;
     }
     DLMS_OBJECT_TYPE ci = (DLMS_OBJECT_TYPE)tmp;
-    CGXByteBuffer ln;
-    ln.Set(&data, data.GetPosition(), 6);
+    unsigned char * ln;
+    ln = data.GetData() + data.GetPosition();
+    data.SetPosition(data.GetPosition() + 6);
     // Attribute
     if ((ret = data.GetUInt8(&id)) != 0)
     {

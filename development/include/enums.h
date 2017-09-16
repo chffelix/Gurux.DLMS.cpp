@@ -77,7 +77,7 @@ typedef enum
     DLMS_SOURCE_DIAGNOSTIC_NONE = 0,
     DLMS_SOURCE_DIAGNOSTIC_NO_REASON_GIVEN = 1,
     //Application context name not supported.
-    DLMS_SOURCE_DIAGNOSTIC_NOT_SUPPORTED = 2,
+    DLMS_SOURCE_DIAGNOSTIC_APPLICATION_CONTEXT_NAME_NOT_SUPPORTED = 2,
     DLMS_SOURCE_DIAGNOSTIC_AUTHENTICATION_MECHANISM_NAME_NOT_RECOGNISED = 11,
     DLMS_SOURCE_DIAGNOSTIC_AUTHENTICATION_MECHANISM_NAME_REQUIRED = 12,
     DLMS_SOURCE_DIAGNOSTIC_AUTHENTICATION_FAILURE = 13,
@@ -2091,5 +2091,36 @@ typedef enum {
     */
     DLMS_UNIT_NO_UNIT = 255
 }DLMS_UNIT;
+
+/*
+* Specifies trace levels.
+*
+*/
+typedef enum {
+    /**
+    * Output no tracing and debugging messages.
+    */
+    GX_TRACE_LEVEL_OFF,
+
+    /**
+    * Output error-handling messages.
+    */
+    GX_TRACE_LEVEL_ERROR,
+
+    /**
+    * Output warnings and error-handling messages.
+    */
+    GX_TRACE_LEVEL_WARNING,
+
+    /**
+    * Output informational messages, warnings, and error-handling messages.
+    */
+    GX_TRACE_LEVEL_INFO,
+
+    /**
+    * Output all debugging and tracing messages.
+    */
+    GX_TRACE_LEVEL_VERBOSE
+}GX_TRACE_LEVEL;
 
 #endif //ENUMS_H

@@ -39,6 +39,11 @@
 #endif
 
 #include "../../development/include/GXDLMSSecureServer.h"
+#if defined(_WIN32) || defined(_WIN64)//Windows
+extern TCHAR DATAFILE[FILENAME_MAX];
+#else
+extern char DATAFILE[FILENAME_MAX];
+#endif
 
 class CGXDLMSBase : public CGXDLMSSecureServer
 {
@@ -52,6 +57,7 @@ private:
 #endif
 
 public:
+    GX_TRACE_LEVEL m_Trace;
 
     /////////////////////////////////////////////////////////////////////////
     //Constructor.
@@ -88,7 +94,7 @@ public:
 
     int StopServer();
 
-    int Init(int port);
+    int Init(int port, GX_TRACE_LEVEL trace);
 
     CGXDLMSObject* FindObject(
         DLMS_OBJECT_TYPE objectType,
